@@ -14,16 +14,18 @@ Open two terminals from the repository root.
 
 ### Docker (recommended local deployment)
 
-With Docker Desktop running, start both services from the repository root:
+With Docker Desktop running, start the full stack from the repository root:
 
 ```powershell
 docker compose up --build
 ```
 
+Available services:
 - Frontend: `http://localhost:8080`
-- Backend API and Swagger docs: `http://localhost:8000/docs`
+- Main backend API and Swagger docs: `http://localhost:8000/docs`
+- Raw SQLite backend API and Swagger docs: `http://localhost:8001/docs`
 
-The Compose volume `crypto_data` keeps the SQLite database between restarts. Stop the services with `docker compose down`; use `docker compose down -v` only when you deliberately want to delete the stored market history.
+The Compose volumes `crypto_data` and `crypto_data_raw` keep the SQLite databases between restarts. Stop the services with `docker compose down`; use `docker compose down -v` only when you deliberately want to delete the stored market history.
 
 ### Local PostgreSQL database (optional)
 
@@ -38,14 +40,23 @@ It exposes PostgreSQL on `localhost:5432` and persists data in the `postgres_dat
 ### Backend
 
 1. Create and activate a Python 3.10+ virtual environment.
-2. Install dependencies and start the API:
+2. Install dependencies and start the main API:
 
    ```powershell
    python -m pip install -r backend/requirements.txt
    python -m backend
    ```
 
-3. The API starts at `http://localhost:8000`; interactive API documentation is at `/docs`.
+3. The main API starts at `http://localhost:8000`; interactive API documentation is at `/docs`.
+
+To run the raw SQLite variant locally instead:
+
+```powershell
+python -m pip install -r backend_raw_sqlite/requirements.txt
+python -m backend_raw_sqlite
+```
+
+That service runs at `http://localhost:8001`; interactive API documentation is at `/docs`.
 
 The initial snapshot is fetched during startup and subsequent snapshots run every five minutes. Use `POST /market-data/fetch` or the frontend **Fetch market data** button to request one immediately.
 
