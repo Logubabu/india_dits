@@ -3,12 +3,13 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from statistics import mean
 
+from backend_raw_sqlite.queries import Queries
 from .database import get_connection
 
 
 def _assets() -> dict[str, list[dict]]:
     with get_connection() as connection:
-        rows = connection.execute("SELECT symbol, price, volume, timestamp FROM market_data ORDER BY timestamp ASC").fetchall()
+        rows = connection.execute(Queries.GET_MARKET_DATA).fetchall()
     grouped: dict[str, list[dict]] = defaultdict(list)
     for row in rows:
         grouped[row["symbol"]].append(dict(row))
@@ -40,6 +41,6 @@ def execute_strategy() -> dict:
                 old_fast, new_fast = mean(prices[-3:-1]), mean(prices[-2:])
                 old_slow, new_slow = mean(prices[-6:-1]), mean(prices[-5:])
                 signal = "BUY" if old_fast <= old_slow and new_fast > new_slow else "SELL" if old_fast >= old_slow and new_fast < new_slow else "HOLD"
-            connection.execute("INSERT INTO strategy_signals (symbol, signal, timestamp) VALUES (?, ?, ?)", (symbol, signal, timestamp))
+            connection.execute(Queries.INSERT_STRATEGY_SIGNAL, (symbol, signal, timestamp))
             signals.append({"symbol": symbol, "signal": signal})
     return {"status": "success", "signals": signals}

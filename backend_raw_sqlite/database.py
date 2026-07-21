@@ -3,6 +3,7 @@ import os
 import sqlite3
 from pathlib import Path
 
+from backend_raw_sqlite.queries import Queries
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).with_name(".env"))
@@ -31,20 +32,4 @@ def get_db():
 
 def create_tables() -> None:
     with get_connection() as connection:
-        connection.executescript("""
-            CREATE TABLE IF NOT EXISTS market_data (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                symbol TEXT NOT NULL,
-                price REAL NOT NULL,
-                volume REAL NOT NULL,
-                timestamp TEXT NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS idx_market_data_symbol_timestamp
-                ON market_data(symbol, timestamp);
-            CREATE TABLE IF NOT EXISTS strategy_signals (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                symbol TEXT NOT NULL,
-                signal TEXT NOT NULL CHECK(signal IN ('BUY', 'SELL', 'HOLD')),
-                timestamp TEXT NOT NULL
-            );
-        """)
+        connection.executescript(Queries.CREATE_MARKET_DATA_TABLE)
