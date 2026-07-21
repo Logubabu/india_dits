@@ -1,0 +1,56 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: sqlite:////app/data/crypto_market.db
+      CORS_ORIGINS: http://localhost:5173,http://localhost:8080
+      FETCH_INTERVAL_MINUTES: 5
+      MARKET_LIMIT: 10
+      QUOTE_CURRENCY: usd
+    volumes:
+      - crypto_data:/app/data
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  backend-raw-sqlite:
+    build:
+      context: .
+      dockerfile: backend_raw_sqlite/Dockerfile
+    environment:
+      DATABASE_URL: sqlite:////app/data/crypto_market_raw.db
+      CORS_ORIGINS: http://localhost:5173,http://localhost:8080
+      FETCH_INTERVAL_MINUTES: 5
+      MARKET_LIMIT: 10
+      QUOTE_CURRENCY: usd
+    volumes:
+      - crypto_data_raw:/app/data
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+
+volumes:
+  crypto_data:
+  crypto_data_raw:

@@ -1,0 +1,48 @@
+import { useCallback, useEffect, useState } from 'react'
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+
+const API_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+type Price = { symbol: string; price: number; volume: number; timestamp: string }
+type Analytics = { symbol: string; current_price: number; price_change_pct: number; volume_change_pct: number; trend: string }
+type Signal = { symbol: string; signal: 'BUY' | 'SELL' | 'HOLD'; timestamp: string }
+const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 })
+const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 })
+const panel = 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6'
+const label = 'text-xs font-extrabold tracking-[0.14em] text-indigo-600'
+
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_URL}${path}`, options)
+  if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail ?? 'Request failed')
+  return response.json() as Promise<T>
+}
+
+function App() {
+  const [tab, setTab] = useState<'dashboard' | 'strategy'>('dashboard')
+  const [markets, setMarkets] = useState<string[]>([]); const [selected, setSelected] = useState('')
+  const [price, setPrice] = useState<Price | null>(null); const [history, setHistory] = useState<Price[]>([])
+  const [analytics, setAnalytics] = useState<Analytics[]>([]); const [signals, setSignals] = useState<Signal[]>([])
+  const [loading, setLoading] = useState(true); const [message, setMessage] = useState('')
+  const loadDashboard = useCallback(async () => { setLoading(true); try { const data = await request<{ markets: string[] }>('/markets'); setMarkets(data.markets); setSelected(current => data.markets.includes(current) ? current : data.markets[0] ?? ''); setMessage(data.markets.length ? '' : 'No market data yet. Fetch a snapshot to get started.') } catch (error) { setMessage(error instanceof Error ? `API unavailable: ${error.message}` : 'Unable to load market data.') } finally { setLoading(false) } }, [])
+  const loadStrategy = useCallback(async () => { try { const [analyticsData, signalData] = await Promise.all([request<Analytics[]>('/analytics'), request<Signal[]>('/strategy/results')]); setAnalytics(analyticsData); setSignals(signalData) } catch (error) { setMessage(error instanceof Error ? error.message : 'Unable to load analytics.') } }, [])
+  useEffect(() => { void loadDashboard() }, [loadDashboard])
+  useEffect(() => { if (selected) void Promise.all([request<Price>(`/prices?symbol=${selected}`), request<Price[]>(`/history?symbol=${selected}`)]).then(([current, points]) => { setPrice(current); setHistory(points) }).catch(() => { setPrice(null); setHistory([]) }) }, [selected])
+  useEffect(() => { if (tab === 'strategy') void loadStrategy() }, [tab, loadStrategy])
+  async function fetchSnapshot() { setMessage('Fetching the latest CoinGecko market snapshot…'); try { await request('/market-data/fetch', { method: 'POST' }); await loadDashboard(); setMessage('Market snapshot updated.') } catch (error) { setMessage(error instanceof Error ? error.message : 'Market fetch failed.') } }
+  async function runStrategy() { setMessage('Running moving-average strategy…'); try { await request('/strategy/run', { method: 'POST' }); await loadStrategy(); setMessage('Strategy results updated.') } catch (error) { setMessage(error instanceof Error ? error.message : 'Strategy run failed.') } }
+  const button = 'rounded-lg px-4 py-2.5 text-sm font-bold transition hover:opacity-90 active:translate-y-px'
+
+  return <main className="mx-auto min-h-screen w-[min(1180px,calc(100%-32px))] py-8 sm:py-12">
+    <header className="mb-8 max-w-2xl"><p className={label}>LIVE MARKET INTELLIGENCE</p><h1 className="mt-1 text-4xl font-bold tracking-tight text-slate-900 sm:text-6xl">Crypto Analytics</h1><p className="mt-3 text-base leading-7 text-slate-500 sm:text-lg">Market snapshots, momentum signals, and a transparent moving-average strategy.</p></header>
+    <nav className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex rounded-xl bg-slate-200 p-1"><button className={`${button} flex-1 ${tab === 'dashboard' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500'}`} onClick={() => setTab('dashboard')}>Dashboard</button><button className={`${button} flex-1 ${tab === 'strategy' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500'}`} onClick={() => setTab('strategy')}>Analytics & strategy</button></div><button className={`${button} bg-indigo-100 text-indigo-700`} onClick={() => void fetchSnapshot()}>Fetch market data</button></nav>
+    {message && <div className="mb-5 rounded-lg border-l-4 border-indigo-500 bg-indigo-50 px-4 py-3 text-sm text-indigo-900" role="status">{message}</div>}
+    {tab === 'dashboard' ? <section className="grid gap-5 lg:grid-cols-[300px_1fr]">
+      <article className={`${panel} lg:row-span-2`}><div className="mb-4 flex justify-between gap-3"><div><p className={label}>ASSETS</p><h2 className="mt-1 text-lg font-bold text-slate-800">Market overview</h2></div><span className="text-sm text-slate-500">{markets.length} tracked</span></div>{loading ? <p className="text-slate-500">Loading markets…</p> : markets.length ? <ul>{markets.map(symbol => <li key={symbol}><button className={`flex w-full items-center justify-between border-b border-slate-100 px-2 py-4 text-left font-semibold ${selected === symbol ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'}`} onClick={() => setSelected(symbol)}><span>{symbol}</span><span className="text-sm">{selected === symbol && price ? currency.format(price.price) : 'View'}</span></button></li>)}</ul> : <p className="leading-6 text-slate-500">Use “Fetch market data” to create the first snapshot.</p>}</article>
+      <article className={`${panel} min-h-[360px]`}><div className="mb-4 flex justify-between"><div><p className={label}>PRICE HISTORY</p><h2 className="mt-1 text-lg font-bold text-slate-800">{selected || 'Select an asset'}</h2></div>{price && <span className="font-semibold text-slate-700">{currency.format(price.price)}</span>}</div>{history.length ? <div className="h-72"><ResponsiveContainer width="100%" height="100%"><LineChart data={history}><CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0"/><XAxis dataKey="timestamp" tickFormatter={(value: string) => new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={35}/><YAxis width={82} tickFormatter={(value: number) => `$${compact.format(value)}`}/><Tooltip labelFormatter={value => new Date(String(value)).toLocaleString()} formatter={value => [currency.format(Number(value)), 'Price']}/><Line type="monotone" dataKey="price" stroke="#4f46e5" strokeWidth={3} dot={false}/></LineChart></ResponsiveContainer></div> : <p className="py-20 text-slate-500">Price history will appear after snapshots have been collected.</p>}</article>
+      {price && <article className={panel}><p className={label}>24H VOLUME</p><strong className="mt-2 block text-2xl text-slate-800">{currency.format(price.volume)}</strong><span className="mt-2 block text-sm text-slate-500">Latest reported market volume</span></article>}
+    </section> : <section className="grid gap-5 lg:grid-cols-2">
+      <article className={panel}><div className="mb-4 flex items-start justify-between gap-3"><div><p className={label}>RANKING</p><h2 className="mt-1 text-lg font-bold text-slate-800">Price & volume movement</h2></div><button className={`${button} bg-indigo-100 text-indigo-700`} onClick={() => void loadStrategy()}>Refresh</button></div>{analytics.length ? <div>{analytics.map(item => <div className="grid grid-cols-2 gap-2 border-b border-slate-100 py-3 text-sm sm:grid-cols-5" key={item.symbol}><strong>{item.symbol}</strong><span>{currency.format(item.current_price)}</span><span className={item.price_change_pct >= 0 ? 'text-emerald-600' : 'text-rose-600'}>{item.price_change_pct >= 0 ? '+' : ''}{item.price_change_pct}% price</span><span className={item.volume_change_pct >= 0 ? 'text-emerald-600' : 'text-rose-600'}>{item.volume_change_pct >= 0 ? '+' : ''}{item.volume_change_pct}% volume</span><em className="hidden text-xs font-bold not-italic text-slate-500 sm:block">{item.trend}</em></div>)}</div> : <p className="text-slate-500">Analytics needs at least two market snapshots per asset.</p>}</article>
+      <article className={panel}><div className="mb-4 flex items-start justify-between gap-3"><div><p className={label}>RULE-BASED ALGO</p><h2 className="mt-1 text-lg font-bold text-slate-800">Strategy signals</h2></div><button className={`${button} bg-indigo-600 text-white`} onClick={() => void runStrategy()}>Run strategy</button></div><p className="mb-4 text-sm leading-6 text-slate-500">Fast (2) and slow (5) moving-average crossover. Signals default to HOLD until enough history is available.</p>{signals.length ? <div>{signals.map(item => <div className="grid grid-cols-[1fr_auto] gap-2 border-b border-slate-100 py-3" key={item.symbol}><strong>{item.symbol}</strong><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${item.signal === 'BUY' ? 'bg-emerald-100 text-emerald-700' : item.signal === 'SELL' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}>{item.signal}</span><small className="col-span-2 text-slate-500">{new Date(item.timestamp).toLocaleString()}</small></div>)}</div> : <p className="text-slate-500">Run the strategy after collecting market snapshots.</p>}</article>
+    </section>}
+  </main>
+}
+export default App
