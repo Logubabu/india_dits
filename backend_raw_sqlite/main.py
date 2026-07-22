@@ -5,6 +5,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 import sqlite3
+from backend_raw_sqlite.queries import Queries
 
 from .analytics import analytics, execute_strategy
 from .database import create_tables, get_db
@@ -40,39 +41,63 @@ async def health(): return {"status": "ok"}
 
 @app.post("/market-data/fetch")
 async def fetch():
-    try: return await fetch_market_data()
-    except Exception as error: raise HTTPException(status_code=502, detail="Unable to fetch CoinGecko market data") from error
+    try: 
+        return await fetch_market_data()
+    except Exception as _e: 
+        raise HTTPException(status_code=502, detail="Unable to fetch CoinGecko market data")
 
 
 @app.get("/markets")
 async def markets(db: sqlite3.Connection = Depends(get_db)):
-    return {"markets": [row[0] for row in db.execute("SELECT DISTINCT symbol FROM market_data ORDER BY symbol").fetchall()]}
+    try:
+        
+        return {"markets": [row[0] for row in db.execute(Queries.GET_DISTINCT_SYMBOLS).fetchall()]}
+    except Exception as _e:
+        raise HTTPException(status_code = 500,detail="Failed to fetch market data")
 
 
 @app.get("/prices")
 async def price(symbol: str, db: sqlite3.Connection = Depends(get_db)):
-    row = db.execute("SELECT symbol, price, volume, timestamp FROM market_data WHERE symbol = ? ORDER BY timestamp DESC LIMIT 1", (symbol.upper(),)).fetchone()
-    if row is None: raise HTTPException(status_code=404, detail="Symbol not found")
-    return dict(row)
+    try:
+        row = db.execute(Queries.GET_PRICE_BY_SYMBOL, (symbol.upper(),)).fetchone()
+        if row is None: 
+            raise HTTPException(status_code=404, detail="Symbol not found")
+        return dict(row)
+    except Exception as _e:
+        raise HTTPException(status_code = 500,detail="Failed to fetch price")
 
 
 @app.get("/history")
 async def history(symbol: str, limit: int = Query(100, ge=2, le=1000), db: sqlite3.Connection = Depends(get_db)):
-    rows = db.execute("SELECT symbol, price, volume, timestamp FROM market_data WHERE symbol = ? ORDER BY timestamp DESC LIMIT ?", (symbol.upper(), limit)).fetchall()
-    return [dict(row) for row in reversed(rows)]
+    try:
+        rows = db.execute(Queries.GET_HISTORY_BY_SYMBOL, (symbol.upper(), limit)).fetchall()
+        return [dict(row) for row in reversed(rows)]
+    except Exception as _e:
+        raise HTTPException(status_code = 500,detail="Failed to fetch History data")
 
 
 @app.get("/analytics")
-async def get_analytics(window: int = Query(1, ge=1, le=1000)): return analytics(window)
+async def get_analytics(num: int = Query(1, ge=1, le=1000)): 
+    try:
+        return analytics(num)
+    except Exception as _e:
+        raise HTTPException(status_code = 500,detail="Failed to fetch analytics data")
 
 
 @app.post("/strategy/run")
-async def run_strategy(): return execute_strategy()
+async def run_strategy(): 
+    try:
+        return execute_strategy()
+    except Exception as _e:
+        raise HTTPException(status_code = 500,detail="Failed to run strategy")
 
 
 @app.get("/strategy/results")
 async def strategy_results(db: sqlite3.Connection = Depends(get_db)):
-    rows = db.execute("SELECT symbol, signal, timestamp FROM strategy_signals ORDER BY timestamp DESC").fetchall()
-    latest = {}
-    for row in rows: latest.setdefault(row["symbol"], dict(row))
-    return list(latest.values())
+    try:
+        rows = db.execute(Queries.GET_STRATEGY_RESULTS).fetchall()
+        latest = {}
+        for row in rows: latest.setdefault(row["symbol"], dict(row))
+        return list(latest.values())
+    except Exception as _e:
+        raise HTTPException(status_code = 500,detail="Failed to fetch strategy result data")

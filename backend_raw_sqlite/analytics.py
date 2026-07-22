@@ -16,13 +16,13 @@ def _assets() -> dict[str, list[dict]]:
     return grouped
 
 
-def analytics(window: int) -> list[dict]:
+def analytics(num: int) -> list[dict]:
     output = []
     for symbol, rows in _assets().items():
-        latest, previous = rows[-1], rows[max(0, len(rows) - window - 1)]
-        comparable = len(rows) > window
-        price_change = ((latest["price"] / previous["price"]) - 1) * 100 if comparable and previous["price"] else 0
-        volume_change = ((latest["volume"] / previous["volume"]) - 1) * 100 if comparable and previous["volume"] else 0
+        latest, previous = rows[-1], rows[max(0, len(rows) - num - 1)]
+        compare_value = len(rows) > num
+        price_change = ((latest["price"] / previous["price"]) - 1) * 100 if compare_value and previous["price"] else 0
+        volume_change = ((latest["volume"] / previous["volume"]) - 1) * 100 if compare_value and previous["volume"] else 0
         output.append({"symbol": symbol, "current_price": latest["price"], "price_change_pct": round(price_change, 2), "volume_change_pct": round(volume_change, 2), "trend": "UP" if price_change > 0 else "DOWN" if price_change < 0 else "FLAT"})
     return sorted(output, key=lambda item: item["price_change_pct"], reverse=True)
 
